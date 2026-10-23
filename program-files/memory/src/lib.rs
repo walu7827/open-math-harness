@@ -196,7 +196,9 @@ impl Options {
                 "--agent-model" => agent_model = Some(value),
                 "--agent-model-retries" => {
                     agent_model_retries = Some(
-                        value.parse::<u32>().map_err(|_| format!("{flag} must be an unsigned 32-bit integer"))?,
+                        value
+                            .parse::<u32>()
+                            .map_err(|_| format!("{flag} must be an unsigned 32-bit integer"))?,
                     )
                 }
                 "--quiet-ms" => quiet_ms = number(&flag, &value)?,
