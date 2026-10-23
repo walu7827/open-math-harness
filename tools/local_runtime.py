@@ -10,8 +10,8 @@ Usage (run from the checkout; commit intended source changes before sync):
     python3 tools/local_runtime.py model-smoke --codex /path/to/codex
     python3 tools/local_runtime.py stop
 
-This operator tool can start/stop its VM and run trusted build scripts there. It
-is not an agent capability or an interactive runtime composition. Host homes,
+This operator tool can start/stop its VM, run trusted build scripts there, and
+own the local resident composition's host bridge. It is not an agent capability. Host homes,
 credentials, SSH agents and proxy environment are never shared. Only the named
 commit's tree enters the VM, via git archive and a checked SHA-256; dirty files,
 Git history/configuration and ignored local research are excluded. A commit may
@@ -22,7 +22,8 @@ Failure is reported without a native fallback or automatic replay. Stopping
 retains the VM disk. Build/test cancellation closes the SSH command, not a claim
 that every guest descendant stopped; stop the dedicated VM when that is needed.
 The guest helper owns snapshot publication and serializes operations. This is a
-development bootstrap, not yet the Codex/Claude-backed resident composition.
+development and local deployment entry point. The resident path uses Codex;
+Claude is not implemented yet.
 Plain mode also removes Lima's guest-agent vsock tunnel, which would otherwise
 bypass an offline project's network namespace. `harden` migrates the earlier
 development profile: disable that guest service, stop the VM, change only its
@@ -124,9 +125,16 @@ def main(argv=None):
     sync.add_argument("--ref", default="HEAD")
     check = commands.add_parser("check")
     check.add_argument("--suite", choices=("core", "all", "lean"), default="core")
-    smoke = commands.add_parser("model-smoke", help="live Codex tool/denial/session test; consumes account usage")
-    smoke.add_argument("--codex", default="codex")
-    smoke.add_argument("--model", help="optional operator-selected Codex model")
+    for name, description in (("model-smoke", "live Codex tool/denial/session test; consumes account usage"),
+                              ("serve", "run the persistent composition with the host Codex account")):
+        model = commands.add_parser(name, help=description)
+        model.add_argument("--codex", default="codex")
+        model.add_argument("--model", help="optional operator-selected Codex model")
+    chat = commands.add_parser("chat", help="talk to the running local composition")
+    chat.add_argument("--project", default="default")
+    chat.add_argument("--session", default="default")
+    chat.add_argument("--message", help="one message; omission opens a text prompt")
+    commands.add_parser("request", help="send one JSON UI operation from stdin")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", args.instance):
         parser.error("--instance must be a lowercase name, at most 63 characters")
@@ -173,6 +181,35 @@ def main(argv=None):
     elif args.command == "model-smoke":
         import local_model_smoke
         asyncio.run(local_model_smoke.run(args.instance, args.codex, args.model))
+    elif args.command == "serve":
+        import local_serve
+        asyncio.run(local_serve.run(args.instance, args.codex, args.model))
+    elif args.command in ("chat", "request"):
+        client = (ROOT / "deploy/local/client.py").read_text()
+        def send(data):
+            lima("shell", "--workdir=/", args.instance, "sudo", "-u", "nucleus", "python3", "-c", client,
+                 args.command, input=data)
+        if args.command == "request":
+            data = sys.stdin.buffer.read(4 * 1024 * 1024 + 1)
+            if len(data) > 4 * 1024 * 1024:
+                raise ValueError("client input exceeds limit")
+            send(data)
+        else:
+            def say(message):
+                send(json.dumps({"project": args.project, "session": args.session, "text": message}).encode())
+            if args.message is not None:
+                say(args.message)
+            else:
+                print("Local chat. /exit leaves the client; the runtime stays running.")
+                while True:
+                    try:
+                        message = input("You: ")
+                    except EOFError:
+                        break
+                    if message == "/exit":
+                        break
+                    if message.strip():
+                        say(message)
     else:
         guest(args.instance, args.command)
     return 0
@@ -188,3 +225,6 @@ if __name__ == "__main__":
     except (OSError, ValueError) as error:
         print(f"local runtime: {error}", file=sys.stderr)
         sys.exit(1)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("local runtime: command interrupted", file=sys.stderr)
+        sys.exit(130)

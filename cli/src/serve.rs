@@ -4,15 +4,17 @@
 //! The platform's values file fills the configuration's parameters. It boots
 //! every configured program and runs until SIGTERM or SIGINT, then shuts the
 //! whole tree down. If a root program exits, the kernel shuts down and exits
-//! with an error so the service manager restarts it clean.
+//! with an error. The service manager's policy may start it fresh; the local
+//! operator composition instead reports the failure without restarting.
 //!
 //! In the VM, systemd runs it as the `nucleus` user with deploy/vm/nucleus.json
 //! and restarts it whenever it exits (deploy/vm/nucleus.service). Every process
 //! it runs is a program of that composition or a process one starts: the
 //! runtime's own run sandboxed, a project's as the projects' user in no
 //! sandbox, in its project's cgroup (crate nucleus-platform). No client has a
-//! kernel identity: a window reaches the VM's UI service only over a link that
-//! service dials to the platform (program-files/ui, module `link`).
+//! kernel identity: a window reaches the VM's UI service over a link that
+//! service dials to the platform (program-files/ui, module `link`), or an
+//! owner-only Unix socket in the local composition.
 
 use std::path::Path;
 use std::sync::Arc;

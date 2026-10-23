@@ -46,6 +46,20 @@ def run(*args, cwd=None):
     subprocess.run(args, cwd=cwd, check=True)
 
 
+def lean_environment():
+    saved = json.loads((ROOT / "toolchains/lean-current.json").read_text())
+    if (not isinstance(saved, dict) or set(saved) != {"version", "environment"}
+            or type(saved["version"]) is not int or saved["version"] != 1
+            or not isinstance(saved["environment"], dict)):
+        raise ValueError("unsupported Lean environment version; run prepare-lean first")
+    environment = saved["environment"]
+    if (set(environment) != {"PB_LEAN", "PB_FROZEN", "NUCLEUS_REPL", "PATH_PREFIX"}
+            or any(not isinstance(value, str) or not Path(value).is_absolute()
+                   or not Path(value).exists() for value in environment.values())):
+        raise ValueError("invalid Lean environment; run prepare-lean first")
+    return environment
+
+
 def install(data, digest, commit):
     if not re.fullmatch(r"[0-9a-f]{64}", digest) or not re.fullmatch(r"[0-9a-f]{40,64}", commit):
         raise ValueError("invalid source identity")
@@ -136,18 +150,26 @@ def main():
             script = "lean.py" if action == "prepare-lean" else "prepare_platform.py"
             run("python3", str(source / "deploy/local" / script))
             return
+        if action == "serve":
+            environment = lean_environment()
+            path = subprocess.check_output([environment["PATH_PREFIX"] + "/lake", "env", "printenv", "LEAN_PATH"],
+                                           cwd=environment["PB_LEAN"], text=True,
+                                           env={**os.environ, "PATH": environment["PATH_PREFIX"] + ":"
+                                                + os.environ["PATH"]}).strip()
+            mapped = []
+            for value in path.split(":"):
+                for original, published in ((Path(environment["PB_LEAN"]), Path("/opt/mathlib")),
+                                            (Path(environment["PATH_PREFIX"]).parent, Path("/opt/lean"))):
+                    if Path(value).is_relative_to(original):
+                        mapped.append(str(published / Path(value).relative_to(original)))
+                        break
+                else:
+                    raise ValueError("Lean import path escapes the installed dependencies")
+            run("sudo", "python3", str(source / "deploy/local/resident.py"), sys.argv[2], ":".join(mapped))
+            return
         run("rustup", "show")  # rust-toolchain.toml is the single version source.
         if action == "check" and sys.argv[2] == "lean":
-            saved = json.loads((ROOT / "toolchains/lean-current.json").read_text())
-            if (not isinstance(saved, dict) or set(saved) != {"version", "environment"}
-                    or type(saved["version"]) is not int or saved["version"] != 1
-                    or not isinstance(saved["environment"], dict)):
-                raise ValueError("unsupported Lean environment version; run prepare-lean first")
-            environment = saved["environment"]
-            if (set(environment) != {"PB_LEAN", "PB_FROZEN", "NUCLEUS_REPL", "PATH_PREFIX"}
-                    or any(not isinstance(value, str) or not Path(value).is_absolute()
-                           or not Path(value).exists() for value in environment.values())):
-                raise ValueError("invalid Lean environment; run prepare-lean first")
+            environment = lean_environment()
             os.environ["PATH"] = environment.pop("PATH_PREFIX") + ":" + os.environ["PATH"]
             os.environ.update(environment)
             run("cargo", "build", "--locked", "--workspace")
