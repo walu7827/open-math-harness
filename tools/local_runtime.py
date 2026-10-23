@@ -17,6 +17,9 @@ commit's tree enters the VM, via git archive and a checked SHA-256; dirty files,
 Git history/configuration and ignored local research are excluded. A commit may
 itself contain private data: selecting it is the operator's disclosure decision.
 The VM needs outbound network for its packages and build dependencies.
+Lima subprocesses receive no standard input unless an operation explicitly
+passes it. In particular, SSH boundary probes must not consume a piped UI
+request before the operator client reads and forwards it.
 
 Failure is reported without a native fallback or automatic replay. Stopping
 retains the VM disk. Build/test cancellation closes the SSH command, not a claim
@@ -53,6 +56,8 @@ def host_env():
 
 
 def lima(*args, **kwargs):
+    if "stdin" not in kwargs and "input" not in kwargs:
+        kwargs["stdin"] = subprocess.DEVNULL
     return subprocess.run(["limactl", "--tty=false", *args], env=host_env(), check=True, **kwargs)
 
 
