@@ -1,0 +1,55 @@
+# Dedicated local runtime. No host directories, credentials or SSH agent are
+# mounted into the guest. Source arrives as an explicit, hashed archive. Keep
+# Linux namespaces, openat2, subreapers and cgroups: a native process-group-only
+# fallback would not implement the runtime's confinement contract.
+minimumLimaVersion: 2.0.0
+vmType: vz
+cpus: 4
+memory: 6GiB
+disk: 30GiB
+mounts: []
+containerd:
+  system: false
+  user: false
+ssh:
+  forwardAgent: false
+  loadDotSSHPubKeys: false
+propagateProxyEnv: false
+portForwards:
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: false
+    proto: any
+    guestPortRange: [1, 65535]
+    ignore: true
+images:
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:1d6bffe64b848468ac97f821d369a4846d983de1800ccf6b5ec8853e85cefc55
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img
+    arch: x86_64
+    digest: sha256:6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2
+provision:
+  - mode: system
+    script: |
+      #!/bin/sh
+      set -eu
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update -qq
+      apt-get install -y -qq build-essential pkg-config libssl-dev bubblewrap \
+        ca-certificates curl git python3 python3-venv jq ripgrep poppler-utils \
+        nodejs npm util-linux
+      # The dedicated VM is the outer boundary. Runtime processes still use
+      # unprivileged bubblewrap; enable its namespaces as upstream CI does.
+      printf 'kernel.apparmor_restrict_unprivileged_userns=0\n' > /etc/sysctl.d/90-nucleus.conf
+      sysctl -p /etc/sysctl.d/90-nucleus.conf
+  - mode: user
+    script: |
+      #!/bin/sh
+      set -eu
+      if [ ! -x "$HOME/.cargo/bin/rustup" ]; then
+        curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs -o /tmp/nucleus-rustup.sh
+        sh /tmp/nucleus-rustup.sh -y --profile minimal --no-modify-path --default-toolchain none
+        rm /tmp/nucleus-rustup.sh
+      fi
+      # The source snapshot's rust-toolchain.toml selects and installs Rust
+      # when the local runner builds it. Do not keep another version here.
