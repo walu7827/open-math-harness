@@ -125,8 +125,9 @@ requests still go through the UI service's kernel handles. Leaving the chat
 client does not stop its session. Ctrl-C in `serve` stops the composition and its
 bridge; its persistent conversations, project files and memory remain in the VM.
 The transient systemd unit also depends on that dedicated SSH login's lifetime.
-Startup and cleanup failures are reported, and side effects are never replayed
-automatically. Inspect the guest's `journalctl -u nucleus-local` on failure.
+Startup and cleanup failures are reported. The bridge does not reconnect or
+replay requests; recorded memory jobs retain the memory service's restart
+behavior. Inspect the guest's `journalctl -u nucleus-local` on failure.
 
 The composition includes the ordinary project, conversation, memory and Lean
 discovery services. Their live local workflows are still being verified.
