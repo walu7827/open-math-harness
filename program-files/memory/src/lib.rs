@@ -24,6 +24,10 @@
 //! for it, because extraction is one call with one answer. A dispatch that
 //! arrives while that call is out is served when it returns, which is why the
 //! call has a deadline (`--extract-deadline-ms`) rather than none.
+//! The deployment may set `--agent-model-retries` for consolidation calls;
+//! zero prevents a failed provider call from being attempted again by that
+//! child. Omission preserves the chat agent's retry policy. This does not
+//! change the job store's recorded recovery behavior or undo a model charge.
 //!
 //! Each project remembers apart: its workspace is `<--root>/<project>` and
 //! its job store `<--db>/<project>.db`, and a session's extraction, a
@@ -127,6 +131,9 @@ pub struct Options {
     /// The model that agent runs on. Defaults to `--model`; either way the
     /// kernel refuses the delegation if it is outside what this service holds.
     pub agent_model: Option<String>,
+    /// An explicit deployment override of the consolidating agent's retry
+    /// policy. None leaves its default in that agent, the single source.
+    pub agent_model_retries: Option<u32>,
     /// How long a session must be quiet before it is read back. A session is
     /// extracted when it stops changing, not while it is being written.
     pub quiet_ms: i64,
@@ -147,7 +154,8 @@ pub struct Options {
 
 impl Options {
     /// Parses `--root <dir> --model <id> --agent-executable <path>
-    /// [--db <dir>] [--projects <dir>] [--agent-model <id>] [--quiet-ms <n>]
+    /// [--db <dir>] [--projects <dir>] [--agent-model <id>] [--agent-model-retries <n>]
+    /// [--quiet-ms <n>]
     /// [--extract-deadline-ms <n>] [--consolidate-deadline-ms <n>]
     /// [--select <n>] [--max-unused-days <n>] [--max-session-bytes <n>]
     /// [--endpoint <name>] [--fs-endpoint <name>]`.
@@ -158,6 +166,7 @@ impl Options {
         let mut model = None;
         let mut agent_executable = None;
         let mut agent_model = None;
+        let mut agent_model_retries = None;
         let mut quiet_ms = 300_000;
         let mut extract_deadline_ms = 180_000;
         let mut consolidate_deadline_ms = 900_000;
@@ -185,6 +194,11 @@ impl Options {
                     agent_executable = Some(if value.starts_with('/') { value } else { format!("/{value}") })
                 }
                 "--agent-model" => agent_model = Some(value),
+                "--agent-model-retries" => {
+                    agent_model_retries = Some(
+                        value.parse::<u32>().map_err(|_| format!("{flag} must be an unsigned 32-bit integer"))?,
+                    )
+                }
                 "--quiet-ms" => quiet_ms = number(&flag, &value)?,
                 "--extract-deadline-ms" => extract_deadline_ms = number(&flag, &value)? as u64,
                 "--consolidate-deadline-ms" => consolidate_deadline_ms = number(&flag, &value)? as u64,
@@ -202,6 +216,7 @@ impl Options {
             model: model.ok_or("--model is required")?,
             agent_executable: agent_executable.ok_or("--agent-executable is required")?,
             agent_model,
+            agent_model_retries,
             homes,
             quiet_ms,
             extract_deadline_ms,
@@ -847,7 +862,7 @@ impl Service<'_> {
         let resource = ResourcePath::new(parts).map_err(|e| e.to_string())?;
         let diff = format!("{}/{}", resource.segments().join("/"), workspace::DIFF);
         let grants = self.agent_grants(&resource)?;
-        let program = ChildProgram {
+        let mut program = ChildProgram {
             executable: self.options.agent_executable.clone(),
             args: vec![
                 "--model".to_owned(),
@@ -866,6 +881,9 @@ impl Service<'_> {
             binds: Vec::new(),
             network: false,
         };
+        if let Some(retries) = self.options.agent_model_retries {
+            program.args.extend(["--model-retries".to_owned(), retries.to_string()]);
+        }
         let spawned =
             self.kernel.spawn_executable(self.authority.spawn, program, grants).map_err(|e| e.to_string())?;
         match spawned {

@@ -77,6 +77,10 @@ fn boot() -> World {
 }
 
 fn boot_with_fs(fs_endpoint: &str) -> World {
+    boot_with_memory(fs_endpoint, &[])
+}
+
+fn boot_with_memory(fs_endpoint: &str, memory_options: &[&str]) -> World {
     let server = FakeHttp::start();
     let mut scenario = Scenario::new();
     scenario.add_fs("fs", "data", fs_endpoint);
@@ -87,6 +91,7 @@ fn boot_with_fs(fs_endpoint: &str) -> World {
     // `--quiet-ms 0`: a session is read back on the next tick rather than in
     // five minutes. Everything else is what a deployment would run.
     scenario.add_memory("memory", "data", MODEL, &["--quiet-ms", "0", "--fs-endpoint", fs_endpoint]);
+    scenario.add_args("memory", memory_options);
     std::fs::create_dir_all(scenario.host("projects/default")).unwrap();
     scenario.bind("memory", "projects", "/projects", false);
     scenario.add_args("memory", &["--projects", "/projects"]);
@@ -342,7 +347,11 @@ enum ConsolidationEnd {
 }
 
 fn partial_is_not_published(end: ConsolidationEnd) {
-    let world = boot();
+    let world = if matches!(end, ConsolidationEnd::ModelFailed) {
+        boot_with_memory("fs", &["--agent-model-retries", "0"])
+    } else {
+        boot()
+    };
     extraction(&world);
     world.server.script_with("consolidating memory", |request| {
         Scripted::json(
@@ -364,8 +373,9 @@ fn partial_is_not_published(end: ConsolidationEnd) {
         if !matches!(end, ConsolidationEnd::ModelFailed) {
             held
         } else {
-            // A rejected request: the agent does not make it again.
-            Scripted::json(400, &json!({"error": {"message": "failed"}}))
+            // A provider error is retryable under the agent's default
+            // policy. This deployment explicitly disables those retries.
+            Scripted::json(500, &json!({"error": {"message": "failed"}}))
         },
     );
     let mut ui = start_remembering(&world);
@@ -434,6 +444,13 @@ fn partial_is_not_published(end: ConsolidationEnd) {
     let expected = if matches!(end, ConsolidationEnd::TerminateMemory) { "ready" } else { "failed" };
     assert!(nucleus_e2e::wait_for(TIMEOUT, || store.status("consolidate", "global").unwrap().as_deref()
         == Some(expected)));
+    if matches!(end, ConsolidationEnd::ModelFailed) {
+        assert_eq!(
+            world.server.received().iter().filter(|r| r.body.contains("consolidating memory")).count(),
+            2,
+            "the failed second generation must not be retried"
+        );
+    }
     assert!(
         store.selected().unwrap().is_empty(),
         "failed consolidation cannot mark selected rows as consumed"

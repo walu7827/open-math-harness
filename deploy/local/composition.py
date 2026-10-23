@@ -10,8 +10,9 @@ selects the host completion broker and an owner-only Unix UI socket, and names
 only the mathematical dependencies installed locally. It never enables a
 native macOS fallback or a less privileged-looking substitute for enforcement.
 
-Model grants are complete-only and scoped to codex. The model provider and
-discovery retries are disabled. The CLI has no monetary charge report, so discovery explicitly has no
+Model grants are complete-only and scoped to codex. Provider, chat, memory-agent
+and discovery call retries are disabled. Recorded memory jobs retain their
+existing restart semantics. The CLI has no monetary charge report, so discovery explicitly has no
 USD ceiling; the existing per-task model-call grants still bound generations.
 The operator must read that limitation when starting a run. Image requests and
 unsupported model parameters are refused by the broker.
@@ -82,6 +83,7 @@ def make(source, lean_path, broker_port, *, memory_quiet_ms=300000):
                       "network": False}
     memory = programs["memory"]["args"]
     replace(memory, ["--quiet-ms", "300000"], ["--quiet-ms", str(memory_quiet_ms)])
+    memory += ["--agent-model-retries", "0"]
     # The full projects service still provides files, shell, PDF, skills and
     # jobs through the real projects identity. Its descriptions must not
     # advertise image-only tools or a mathematical environment not installed.
