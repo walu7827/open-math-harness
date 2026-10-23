@@ -208,9 +208,7 @@ fn publish(
     // A failure after publication has an unknown outcome; it is never safe to replay it.
     let stat =
         rustix::fs::fstat(&upload.file).map_err(|e| Error::new(ErrorCode::UnknownOutcome, e.to_string()))?;
-    revision(&upload.file, &stat)
-        .map(Some)
-        .map_err(|e| Error::new(ErrorCode::UnknownOutcome, e.message))
+    revision(&upload.file, &stat).map(Some).map_err(|e| Error::new(ErrorCode::UnknownOutcome, e.message))
 }
 
 /// Check the opened file, without following links. Publication still has a small
