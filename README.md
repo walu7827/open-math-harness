@@ -1,5 +1,58 @@
 # Open Math Harness
 
+## This fork: local macOS + Codex research
+
+This fork adds a standalone **paper-math composition** using Python 3.10+ and an
+installed, logged-in Codex CLI. It runs on macOS without Rust, bubblewrap or an Open
+Math OS account. It reuses the upstream `pi0` and `pi_doubling` discovery policies
+and saves a search tree, input snapshots, candidate reports and execution events.
+
+```sh
+codex login
+python3 tools/codex_harness.py doctor
+python3 tools/codex_harness.py run \
+  --task-file /path/to/task.txt \
+  --context-file /path/to/known-results.txt \
+  --run-dir .codex-harness/experiment-1
+python3 tools/codex_harness.py resume \
+  --run-dir .codex-harness/experiment-1 \
+  --followup 'Check the previous argument and resolve its first open obligation.'
+python3 tools/codex_harness.py status .codex-harness/experiment-1
+```
+
+The same commands can be run by a local Codex app task. Context files are optional
+and repeatable. `--rounds`, `--width` and `--timeout` bound execution; width defaults
+to one and attempts run sequentially. `--policy pi_doubling` selects the upstream
+fresh-root/continuation mix. `--model` is optional; omission uses the CLI default.
+Normal Codex account usage applies. No credentials are embedded in this fork.
+
+Workers receive explicit text snapshots. They use the Codex read-only sandbox,
+with shell, apps, plugins, hooks, browser tools and delegation disabled. This mode
+does not run Lean or edit the source project. User configuration is not loaded;
+saved CLI authentication is reused. Resume verifies snapshot and candidate hashes
+and never silently replaces the original target. Results are **unverified**, even
+if the model reports a complete proof. Timeouts, errors and interruptions remain
+recoverable failed attempts; they cannot be reported as solved proofs.
+
+This is a new local composition, **not a macOS port of the Rust microkernel** or
+the hosted UI, memory service, multi-tenant isolation or Lean verifier. The Linux
+runtime below retains its original platform requirements. Codex's sandbox is a
+different trust boundary from Nucleus capabilities and Linux namespaces. The
+module documentation in `tools/codex_harness.py` describes the exact limitations.
+Run directories contain private research and logs; keep them outside publication.
+
+Portable regression tests (no model call):
+
+```sh
+python3 -m unittest discover -s tools -p 'test_*.py'
+python3 tools/check_markdown.py
+```
+
+Codex integration references: [non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode)
+and [integration choices](https://developers.openai.com/blog/codex-as-a-platform).
+
+## Upstream runtime
+
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,
 services and agents, written in Rust. Its first generation is named Nucleus.

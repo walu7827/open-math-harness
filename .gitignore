@@ -8,3 +8,6 @@
 
 __pycache__/
 .playwright-mcp/
+
+# Local portable Codex runs can contain unpublished research and transcripts.
+.codex-harness/
