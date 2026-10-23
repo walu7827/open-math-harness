@@ -67,8 +67,10 @@ note() {
 # impersonated by a project after it exits; a local Lima profile therefore
 # removes its guest-agent tunnel entirely before invoking this script.
 check_vsock() {
-    listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null) ||
-        fail "ss cannot check vsock listeners"
+    if ! listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null); then
+        systemctl stop nucleus.service 2>/dev/null || true
+        fail "ss cannot check vsock listeners; the runtime is stopped"
+    fi
     stray=$(printf '%s\n' "$listeners" | awk 'NR > 1 && $0 !~ /pid=1,/ { print $5 }' | tr '\n' ' ')
     if [ -n "$stray" ]; then
         systemctl stop nucleus.service 2>/dev/null || true

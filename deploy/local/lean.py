@@ -27,6 +27,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,8 +53,20 @@ def main():
     if os.getuid() == 0:
         raise ValueError("Lean build must run as the unprivileged guest operator")
     pins = json.loads(Path(__file__).with_suffix(".json").read_text())
-    if pins["version"] != 1:
+    if (set(pins) != {"version", "lean", "archives", "putnambench", "repl"}
+            or type(pins["version"]) is not int or pins["version"] != 1
+            or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", pins["lean"])
+            or set(pins["archives"]) != {"aarch64", "x86_64"}):
         raise ValueError("unsupported toolchain manifest version")
+    for spec in pins["archives"].values():
+        if (set(spec) != {"name", "sha256"} or Path(spec["name"]).name != spec["name"]
+                or not re.fullmatch(r"[0-9a-f]{64}", spec["sha256"])):
+            raise ValueError("invalid toolchain archive pin")
+    for name in ("putnambench", "repl"):
+        spec = pins[name]
+        if (set(spec) != {"url", "commit"} or not spec["url"].startswith("https://github.com/")
+                or not re.fullmatch(r"[0-9a-f]{40}", spec["commit"])):
+            raise ValueError("invalid source pin")
     cache = Path.home() / ".local/share/nucleus-local/toolchains"
     cache.mkdir(parents=True, exist_ok=True)
     # The complete import Mathlib cache is large. Refuse before downloading;
