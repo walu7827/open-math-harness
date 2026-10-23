@@ -39,7 +39,8 @@ signal.signal(signal.SIGINT, interrupted)
 key = sys.stdin.readline().strip()
 
 def watch_operator():
-    sys.stdin.read(1)
+    # Do not hold a buffered-I/O lock across the main thread's failure exit.
+    os.read(sys.stdin.fileno(), 1)
     os.kill(os.getpid(), signal.SIGTERM)
 threading.Thread(target=watch_operator, daemon=True).start()
 if not 32 <= len(key) <= 256 or not all((c.isalnum() or c in '-_' for c in key)):

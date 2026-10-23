@@ -9,6 +9,9 @@ are not advertised as working services. It
 selects the host completion broker and an owner-only Unix UI socket, and names
 only the mathematical dependencies installed locally. It never enables a
 native macOS fallback or a less privileged-looking substitute for enforcement.
+The broker URL is a fixed loopback argument of this deployment, not a platform
+URL parameter: those deliberately accept only HTTPS destinations. The host
+operator owns the SSH forward and validates its guest port before composition.
 
 Model grants are complete-only and scoped to codex. Provider, chat, memory-agent
 and discovery call retries are disabled. Recorded memory jobs retain their
@@ -70,7 +73,8 @@ def make(source, lean_path, broker_port, *, memory_quiet_ms=300000):
             spec["default"] = MODEL
         elif spec["kind"] == "model_list":
             spec["default"] = [MODEL]
-    config["parameters"]["model_base_url"]["default"] = f"http://127.0.0.1:{broker_port}"
+    replace(programs["model"]["args"], ["--base-url", {"param": "model_base_url"}],
+            ["--base-url", f"http://127.0.0.1:{broker_port}"])
     config["parameters"]["agent_model_deadline_ms"]["default"] = 180000
     config["parameters"]["discovery_reasoning_effort"]["default"] = "high"
     config["parameters"]["discovery_max_attempts"]["default"] = 16

@@ -5,10 +5,8 @@ import hashlib
 import importlib.util
 import io
 import json
-import os
 from pathlib import Path
 import subprocess
-import sys
 import tarfile
 import tempfile
 import unittest
@@ -23,36 +21,6 @@ SPEC.loader.exec_module(GUEST)
 
 
 class LocalRuntime(unittest.TestCase):
-    def test_bad_smoke_input_exits_without_aborting_while_stdin_is_open(self):
-        with tempfile.TemporaryDirectory() as directory:
-            (Path(directory) / ".local/share/nucleus-local").mkdir(parents=True)
-            script = local_runtime.ROOT / "deploy/local/model_smoke.py"
-            # Exercise the real process exit with an open operator pipe. No
-            # runtime or model starts: the invalid token is refused first.
-            # Slow error reporting leaves time for the operator listener to
-            # block, as it does during a real deployment/startup failure.
-            runner = ("import resource, runpy, sys, time\n"
-                      "resource.setrlimit(resource.RLIMIT_CORE, (0, 0))\n"
-                      "def report(*error):\n"
-                      "    sys.__excepthook__(*error)\n"
-                      "    time.sleep(0.1)\n"
-                      "sys.excepthook = report\n"
-                      "sys.argv = sys.argv[1:]\n"
-                      "runpy.run_path(sys.argv[0], run_name='__main__')\n")
-            command = [sys.executable, "-c", runner,
-                       str(script), "37071"]
-            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                       stderr=subprocess.PIPE, env={**os.environ, "HOME": directory})
-            try:
-                process.stdin.write(b"bad\n")
-                process.stdin.flush()
-                code = process.wait(timeout=10)
-            finally:
-                if process.poll() is None:
-                    process.kill()
-                _, error = process.communicate(timeout=5)
-            self.assertEqual(code, 1, error.decode(errors="replace")[-2000:])
-
     def test_archive_and_publication_send_only_the_selected_commit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

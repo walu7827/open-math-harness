@@ -85,7 +85,9 @@ def main(port, lean_path):
     signal.signal(signal.SIGTERM, lambda *_: stopped.set())
     signal.signal(signal.SIGINT, lambda *_: stopped.set())
     def watch_operator():
-        sys.stdin.buffer.read(1)
+        # The process owns this reader. A raw descriptor wait holds no Python
+        # buffered-I/O lock when a startup failure exits the main thread.
+        os.read(sys.stdin.fileno(), 1)
         stopped.set()
     threading.Thread(target=watch_operator, daemon=True).start()
     attempted = False
