@@ -22,12 +22,14 @@ import io
 import json
 import os
 from pathlib import Path, PurePosixPath
+import platform
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import urllib.request
 
 
 ROOT = Path.home() / ".local/share/nucleus-local"
@@ -74,6 +76,44 @@ def install(data, digest, commit):
             shutil.rmtree(source)
 
 
+def node_for_ci(source):
+    """Install CI's exact Node release in the guest cache, without root.
+
+    The workflow is the version source. HTTPS fetches only nodejs.org release
+    files; verify the archive against that release's SHA-256 list before
+    extraction. An incomplete installation is never published. This is build
+    tooling, not a Node installation for sandboxed runtime programs.
+    """
+    versions = re.findall(r"node-version:\s*([0-9]+\.[0-9]+\.[0-9]+)",
+                          (source / ".github/workflows/ci.yml").read_text())
+    if len(versions) != 1:
+        raise ValueError("CI must select exactly one explicit Node version")
+    arch = {"aarch64": "arm64", "x86_64": "x64"}[platform.machine()]
+    name = f"node-v{versions[0]}-linux-{arch}"
+    cache = ROOT / "toolchains"
+    destination = cache / name
+    binary = destination / "bin/node"
+    if not destination.exists():
+        cache.mkdir(exist_ok=True)
+        url = f"https://nodejs.org/dist/v{versions[0]}/"
+        filename = name + ".tar.xz"
+        with urllib.request.urlopen(url + "SHASUMS256.txt", timeout=60) as response:
+            hashes = dict(line.split()[::-1] for line in response.read().decode().splitlines())
+        with urllib.request.urlopen(url + filename, timeout=60) as response:
+            data = response.read()
+        if hashlib.sha256(data).hexdigest() != hashes[filename]:
+            raise ValueError("Node release checksum mismatch")
+        with tempfile.TemporaryDirectory(dir=cache) as staging:
+            with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+                archive.extractall(staging, filter="data")
+            (Path(staging) / name).rename(destination)
+    actual = subprocess.check_output([str(binary), "--version"], text=True).strip()
+    if actual != "v" + versions[0]:
+        raise ValueError("cached Node does not match CI")
+    print(f"Node for CI: {actual}", flush=True)
+    return str(binary)
+
+
 def main():
     ROOT.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (ROOT / "operator.lock").open("w") as lock:
@@ -101,7 +141,7 @@ def main():
             run("python3", "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py")
             run("python3", "tools/check_markdown.py")
             if sys.argv[2] == "all":
-                run("node", "--test", "tests/mcp/mcp.test.js")
+                run(node_for_ci(source), "--test", "tests/mcp/mcp.test.js")
         elif action == "slice":
             run("cargo", "run", "--locked", "--manifest-path", "cli/Cargo.toml", "--", "run", "examples/slice/config.json")
         else:
