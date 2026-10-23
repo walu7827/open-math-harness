@@ -135,6 +135,10 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    except subprocess.CalledProcessError as error:
+        # The SSH argv contains the entire guest helper, not a useful error.
+        print(f"local runtime: command failed with exit code {error.returncode}; see output above", file=sys.stderr)
+        sys.exit(1)
+    except (OSError, ValueError) as error:
         print(f"local runtime: {error}", file=sys.stderr)
         sys.exit(1)
