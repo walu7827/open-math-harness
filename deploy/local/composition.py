@@ -5,7 +5,10 @@ JSON is. Its service graph, project identities, grants and lifecycle remain the
 source of truth. This derivation removes the hosted platform/GitHub links,
 its mirror-only scanner, and suggestions/Ultramath whose model calls require
 output-token caps the CLI cannot enforce. They receive no local grants and
-are not advertised as working services. It
+are not advertised as working services. Project archiving is also unavailable:
+the UI's archive workflow requires stopping swarm, so the local UI receives no
+begin_archive, archive or unarchive grant. Its startup dependency checks remain
+intact; this composition never pretends an omitted service was stopped. It
 selects the host completion broker and an owner-only Unix UI socket, and names
 only the mathematical dependencies installed locally. It never enables a
 native macOS fallback or a less privileged-looking substitute for enforcement.
@@ -61,6 +64,11 @@ def make(source, lean_path, broker_port, *, memory_quiet_ms=300000):
         for grant in entry["grants"]:
             if grant["endpoint"] in omitted:
                 continue
+            if entry["program"] == "ui" and grant["endpoint"] == "projects":
+                grant["actions"] = [action for action in grant["actions"]
+                                    if action not in ("begin_archive", "archive", "unarchive")]
+                if not grant["actions"]:
+                    continue
             if grant["endpoint"] == "model":
                 grant["actions"] = [action for action in grant["actions"] if action == "complete"]
                 grant["resource"] = ["codex"]

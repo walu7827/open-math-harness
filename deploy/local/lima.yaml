@@ -10,6 +10,8 @@ plain: true
 cpus: 4
 # A resident REPL retains about 2.4 GiB of private memory while a separate
 # verifier maps about 6.4 GiB of Mathlib. Leave room for both and the runtime.
+# The Mac also needs headroom for its own applications: host swapping can
+# stall Lean even when the guest reports available memory and no swap.
 memory: 12GiB
 disk: 64GiB
 mounts: []

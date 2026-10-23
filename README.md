@@ -96,7 +96,12 @@ read-only copy for the verifier. The runtime must be stopped. It requires at lea
 30 GiB of free guest disk space for a new toolchain; new VMs have 12 GiB of memory
 and a 64 GiB disk. For an older smaller VM, stop it and run
 `limactl edit open-math-harness --memory 12` before starting it again: the resident
-REPL and independent verifier need this room to avoid repeated disk reads.
+REPL and independent verifier need room to coexist. The Mac must also have
+memory available for macOS and other applications. Guest free memory and zero
+guest swap do not rule out host swapping, which can stall Mathlib imports past
+their deadlines. Check the Mac's memory pressure before increasing the VM's RAM.
+If builds leave the host under pressure, stop the dedicated VM before freeing
+host memory, then start it fresh; this ends every guest process and keeps its disk.
 The opt-in tests use the development assets; publication alone does not configure
 or start a resident verifier.
 After installation, `python3 tools/local_runtime.py check --suite lean` runs the
@@ -138,7 +143,8 @@ output-token caps, temperature and opaque reasoning state are unsupported.
 Reported token usage is retained, but dollar cost is unknown: discovery has no
 USD ceiling and uses its existing per-task model-call budgets. Hosted platform
 and GitHub links, suggestions and Ultramath are omitted; the latter two require
-output-token caps that this CLI bridge cannot enforce.
+output-token caps that this CLI bridge cannot enforce. Project archiving and
+unarchiving are unavailable because the UI's archive workflow requires swarm.
 
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,
