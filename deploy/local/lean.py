@@ -130,7 +130,7 @@ def main():
               "NUCLEUS_REPL": str(target / "repl/.lake/build/bin/repl"),
               "PATH_PREFIX": str(toolchain / "bin")}
     pointer = cache / "lean-current.next"
-    pointer.write_text(json.dumps(result) + "\n")
+    pointer.write_text(json.dumps({"version": 1, "environment": result}) + "\n")
     pointer.replace(cache / "lean-current.json")
     print(json.dumps(result), flush=True)
 

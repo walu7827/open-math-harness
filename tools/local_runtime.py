@@ -123,7 +123,7 @@ def main(argv=None):
     sync = commands.add_parser("sync", help="send only a committed source tree")
     sync.add_argument("--ref", default="HEAD")
     check = commands.add_parser("check")
-    check.add_argument("--suite", choices=("core", "all"), default="core")
+    check.add_argument("--suite", choices=("core", "all", "lean"), default="core")
     smoke = commands.add_parser("model-smoke", help="live Codex tool/denial/session test; consumes account usage")
     smoke.add_argument("--codex", default="codex")
     smoke.add_argument("--model", help="optional operator-selected Codex model")
