@@ -7,6 +7,7 @@ Usage (run from the checkout; commit intended source changes before sync):
     python3 tools/local_runtime.py check --suite core
     python3 tools/local_runtime.py check --suite all
     python3 tools/local_runtime.py slice
+    python3 tools/local_runtime.py model-smoke --codex /path/to/codex
     python3 tools/local_runtime.py stop
 
 This operator tool can start/stop its VM and run trusted build scripts there. It
@@ -25,6 +26,7 @@ development bootstrap, not yet the Codex/Claude-backed resident composition.
 """
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -99,6 +101,9 @@ def main(argv=None):
     sync.add_argument("--ref", default="HEAD")
     check = commands.add_parser("check")
     check.add_argument("--suite", choices=("core", "all"), default="core")
+    smoke = commands.add_parser("model-smoke", help="live Codex tool/denial/session test; consumes account usage")
+    smoke.add_argument("--codex", default="codex")
+    smoke.add_argument("--model", help="optional operator-selected Codex model")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[a-z][a-z0-9-]{0,62}", args.instance):
         parser.error("--instance must be a lowercase name, at most 63 characters")
@@ -127,6 +132,9 @@ def main(argv=None):
             guest(args.instance, "install", digest, commit, stdin=archive)
     elif args.command == "check":
         guest(args.instance, "check", args.suite)
+    elif args.command == "model-smoke":
+        import local_model_smoke
+        asyncio.run(local_model_smoke.run(args.instance, args.codex, args.model))
     else:
         guest(args.instance, args.command)
     return 0

@@ -75,6 +75,19 @@ The operator workflow and failure behavior are documented in
 bootstrap; a standalone resident composition with Codex/Claude, interactive
 clients, memory and configured Lean proof search is still being implemented.
 
+An explicit Codex integration check is also available after `sync` and `build`:
+
+```sh
+python3 tools/local_runtime.py model-smoke --codex /path/to/codex
+```
+
+This consumes the logged-in host account's usage. It starts a temporary confined
+Linux chat composition, checks an allowed read and a kernel denial, restarts the
+runtime and verifies that saved history continues without replaying the read.
+Host CLI credentials stay on the Mac. `tools/local_model.py` documents the local
+broker's completion-only text protocol, parameter limits and cancellation; it
+does not yet provide Claude, memory consolidation or Lean integration.
+
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,
 services and agents, written in Rust. Its first generation is named Nucleus.
