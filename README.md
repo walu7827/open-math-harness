@@ -68,7 +68,9 @@ python3 tools/local_runtime.py check --suite all
 python3 tools/local_runtime.py stop
 ```
 
-The VM has no host directory mounts or forwarded SSH agent. Runtime processes
+The VM uses Lima plain mode, with no guest-agent vsock tunnel, host directory
+mounts or forwarded SSH agent. An older development VM can be migrated with
+`python3 tools/local_runtime.py harden`; its disk and data are retained. Runtime processes
 retain Linux bubblewrap confinement. Stopping keeps its disk and source snapshots.
 The operator workflow and failure behavior are documented in
 `tools/local_runtime.py` and `deploy/local/guest.py`. This is a development
@@ -87,6 +89,11 @@ runtime and verifies that saved history continues without replaying the read.
 Host CLI credentials stay on the Mac. `tools/local_model.py` documents the local
 broker's completion-only text protocol, parameter limits and cancellation; it
 does not yet provide Claude, memory consolidation or Lean integration.
+
+`python3 tools/local_runtime.py prepare-lean` installs the pinned public Lean,
+Mathlib and REPL development environment in the guest. It requires at least
+20 GiB of free guest disk space for a new toolchain; new VMs have a 64 GiB disk.
+These are development assets for opt-in tests, not a configured resident verifier.
 
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,

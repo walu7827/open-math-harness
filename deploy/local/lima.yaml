@@ -4,9 +4,12 @@
 # fallback would not implement the runtime's confinement contract.
 minimumLimaVersion: 2.0.0
 vmType: vz
+# The guest agent exposes a vsock tunnel service outside network namespaces.
+# Plain mode removes that service, not just automatic host port forwarding.
+plain: true
 cpus: 4
 memory: 6GiB
-disk: 30GiB
+disk: 64GiB
 mounts: []
 containerd:
   system: false
@@ -15,12 +18,7 @@ ssh:
   forwardAgent: false
   loadDotSSHPubKeys: false
 propagateProxyEnv: false
-portForwards:
-  - guestIP: "0.0.0.0"
-    guestIPMustBeZero: false
-    proto: any
-    guestPortRange: [1, 65535]
-    ignore: true
+portForwards: []
 images:
   - location: https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-arm64.img
     arch: aarch64
@@ -33,11 +31,16 @@ provision:
     script: |
       #!/bin/sh
       set -eu
+      # Plain mode skips guest-agent installation, but an older disk may
+      # retain its enabled unit. No project process may reach this daemon.
+      if systemctl cat lima-guestagent.service >/dev/null 2>&1; then
+        systemctl disable --now lima-guestagent.service
+      fi
       export DEBIAN_FRONTEND=noninteractive
       apt-get update -qq
       apt-get install -y -qq build-essential pkg-config libssl-dev bubblewrap \
         ca-certificates curl git python3 python3-venv jq ripgrep poppler-utils \
-        nodejs npm util-linux
+        nodejs npm util-linux zstd
       # The dedicated VM is the outer boundary. Runtime processes still use
       # unprivileged bubblewrap; enable its namespaces as upstream CI does.
       printf 'kernel.apparmor_restrict_unprivileged_userns=0\n' > /etc/sysctl.d/90-nucleus.conf

@@ -74,16 +74,14 @@ class LocalRuntime(unittest.TestCase):
 
     def test_existing_vm_with_host_access_is_refused(self):
         safe = {"mounts": [], "ssh": {"forwardAgent": False, "loadDotSSHPubKeys": False},
-                "propagateProxyEnv": False,
-                "portForwards": [{"ignore": True, "guestPortRange": [1, 65535],
-                                  "guestIP": "0.0.0.0", "proto": "any"}]}
+                "propagateProxyEnv": False, "plain": True, "portForwards": []}
         local_runtime.check_boundary({"config": safe})
         for key, value in (("mounts", [{"location": "~"}]), ("ssh", {"forwardAgent": True}),
                            ("ssh", {"loadDotSSHPubKeys": True}), ("propagateProxyEnv", True),
                            ("env", {"HOST_TOKEN": "fixture"}),
                            ("copyToHost", [{"guest": "/tmp/file", "host": "~/file"}]),
-                           ("portForwards", [{**safe["portForwards"][0], "guestIPMustBeZero": True}]),
-                           ("portForwards", [])):
+                           ("portForwards", [{"static": True, "guestPort": 8080}]),
+                           ("plain", False)):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 local_runtime.check_boundary({"config": {**copy.deepcopy(safe), key: value}})
 
