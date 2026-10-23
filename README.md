@@ -53,6 +53,28 @@ and [integration choices](https://developers.openai.com/blog/codex-as-a-platform
 
 ## Upstream runtime
 
+### Local Linux development on macOS
+
+With Lima and Python 3.12+ installed, this fork can build and test the Linux
+runtime in a dedicated VM on the Mac. Commit intended source changes first:
+`sync` transfers a committed tree, excluding uncommitted and ignored files.
+
+```sh
+python3 tools/local_runtime.py start
+python3 tools/local_runtime.py sync
+python3 tools/local_runtime.py check --suite core
+python3 tools/local_runtime.py slice
+python3 tools/local_runtime.py check --suite all
+python3 tools/local_runtime.py stop
+```
+
+The VM has no host directory mounts or forwarded SSH agent. Runtime processes
+retain Linux bubblewrap confinement. Stopping keeps its disk and source snapshots.
+The operator workflow and failure behavior are documented in
+`tools/local_runtime.py` and `deploy/local/guest.py`. This is a development
+bootstrap; a standalone resident composition with Codex/Claude, interactive
+clients, memory and configured Lean proof search is still being implemented.
+
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,
 services and agents, written in Rust. Its first generation is named Nucleus.
