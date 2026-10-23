@@ -7,6 +7,9 @@ VM. The token is bound only into the model provider. Persistent conversations,
 memory, approvals and run records remain in the existing runtime data paths.
 The configuration is root-owned; each runtime service still runs as nucleus
 under bubblewrap, and project processes use the installed identity helper.
+The installed bundle must name this exact committed source snapshot; syncing
+different source requires prepare-platform before it can start. A mismatch
+fails before a broker token is read or any runtime state is acquired.
 
 systemd owns the runtime and its delegated cgroup. BindsTo plus After binds the
 unit to this SSH login's session scope: even if this helper is killed, ending
@@ -63,6 +66,12 @@ def main(port, lean_path):
         raise ValueError("a local runtime unit already exists")
     if property_of("nucleus.service", "ActiveState") not in ("inactive", "failed"):
         raise ValueError("the hosted runtime is active")
+    bundle = Path("/opt/nucleus/bin/nucleus").resolve(strict=True).parents[1]
+    root_directory(bundle)
+    installed = json.loads((bundle / "manifest.json").read_text())
+    selected = json.loads((SOURCE / ".git/nucleus-source.json").read_text())
+    if installed.get("version") != 1 or installed.get("source") != selected:
+        raise ValueError("installed runtime differs from the selected source; run prepare-platform")
     key = sys.stdin.buffer.readline(258).strip()
     if not re.fullmatch(rb"[A-Za-z0-9_-]{32,128}", key):
         raise ValueError("invalid per-run broker token")
