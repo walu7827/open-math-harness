@@ -62,22 +62,6 @@ note() {
     echo "nucleus activate: $*" >&2
 }
 
-# The same check applies to a hosted activation and a local preparation.
-# No network namespace hides vsock. A listener outside systemd can be
-# impersonated by a project after it exits; a local Lima profile therefore
-# removes its guest-agent tunnel entirely before invoking this script.
-check_vsock() {
-    if ! listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null); then
-        systemctl stop nucleus.service 2>/dev/null || true
-        fail "ss cannot check vsock listeners; the runtime is stopped"
-    fi
-    stray=$(printf '%s\n' "$listeners" | awk 'NR > 1 && $0 !~ /pid=1,/ { print $5 }' | tr '\n' ' ')
-    if [ -n "$stray" ]; then
-        systemctl stop nucleus.service 2>/dev/null || true
-        fail "vsock listeners that are not systemd's: $stray; the runtime is stopped"
-    fi
-}
-
 # 1. The root filesystem fills its disk. The platform grows a VM's disk when
 # its tier grows, and the image has cloud-init, which would grow it at boot,
 # switched off. The root partition grows into the room after it, then its ext4
@@ -403,6 +387,23 @@ closed() {
 closed -exec chmod go-rwx {} +
 open=$(closed -exec $as_projects sh -c "$probe_paths" sh {} +)
 [ -z "$open" ] || fail "the projects' user reaches ${open}which the runtime keeps to itself"
+
+# The same check applies to a hosted activation and a local preparation.
+# It becomes available only after the pre-switch isolation checks above.
+# No network namespace hides vsock. A listener outside systemd can be
+# impersonated by a project after it exits; a local Lima profile therefore
+# removes its guest-agent tunnel entirely before invoking this script.
+check_vsock() {
+    if ! listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null); then
+        systemctl stop nucleus.service 2>/dev/null || true
+        fail "ss cannot check vsock listeners; the runtime is stopped"
+    fi
+    stray=$(printf '%s\n' "$listeners" | awk 'NR > 1 && $0 !~ /pid=1,/ { print $5 }' | tr '\n' ' ')
+    if [ -n "$stray" ]; then
+        systemctl stop nucleus.service 2>/dev/null || true
+        fail "vsock listeners that are not systemd's: $stray; the runtime is stopped"
+    fi
+}
 
 # 7. The switch. The fixed program paths point at this bundle, atomically.
 link() {
