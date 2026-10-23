@@ -93,10 +93,10 @@ does not yet provide Claude, memory consolidation or Lean integration.
 `python3 tools/local_runtime.py prepare-lean` installs the pinned public Lean,
 Mathlib and REPL development environment and publishes a separate root-owned,
 read-only copy for the verifier. The runtime must be stopped. It requires at least
-30 GiB of free guest disk space for a new toolchain; new VMs have 8 GiB of memory
-and a 64 GiB disk. For an older 6 GiB VM, stop it and run
-`limactl edit open-math-harness --memory 8` before starting it again: importing
-complete Mathlib needs the additional memory to avoid repeated disk reads.
+30 GiB of free guest disk space for a new toolchain; new VMs have 12 GiB of memory
+and a 64 GiB disk. For an older smaller VM, stop it and run
+`limactl edit open-math-harness --memory 12` before starting it again: the resident
+REPL and independent verifier need this room to avoid repeated disk reads.
 The opt-in tests use the development assets; publication alone does not configure
 or start a resident verifier.
 After installation, `python3 tools/local_runtime.py check --suite lean` runs the

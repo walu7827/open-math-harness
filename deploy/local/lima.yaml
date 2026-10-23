@@ -8,9 +8,9 @@ vmType: vz
 # Plain mode removes that service, not just automatic host port forwarding.
 plain: true
 cpus: 4
-# A complete Mathlib import exceeds the practical page-cache room in a 6 GiB
-# guest; 8 GiB leaves space for the verifier and its read-only imported files.
-memory: 8GiB
+# A resident REPL retains about 2.4 GiB of private memory while a separate
+# verifier maps about 6.4 GiB of Mathlib. Leave room for both and the runtime.
+memory: 12GiB
 disk: 64GiB
 mounts: []
 containerd:
