@@ -7,6 +7,8 @@ private model token, and an owner Unix UI socket. It reads a synthetic allowed
 file, verifies a kernel denial for a synthetic forbidden file, then restarts the
 runtime and checks that history restores without re-executing the read. The
 host receives only the test outcome and token counts, never the transcript.
+The shared operator lock is held throughout, so source publication or a build
+cannot replace the snapshot or executables while this composition uses them.
 
 No project-user/cgroup isolation, memory consolidation or Lean is claimed by
 this small composition. Data and temporary credentials are removed on exit.
@@ -15,6 +17,7 @@ also stop it. Shutdown must report success; a timeout or incomplete cleanup
 fails the smoke. Like other operator processes, SIGKILL or host/VM loss can
 prevent cleanup; this test does not provide crash recovery.
 """
+import fcntl
 import json
 import os
 import signal
@@ -25,6 +28,9 @@ import tempfile
 import time
 import threading
 from pathlib import Path
+
+operator_lock = (Path.home() / '.local/share/nucleus-local/operator.lock').open('w')
+fcntl.flock(operator_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 def interrupted(*_):
     raise InterruptedError('operator connection closed or smoke interrupted')
