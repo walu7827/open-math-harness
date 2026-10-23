@@ -22,6 +22,27 @@ fn load(relative: &str) -> LauncherConfig {
     LauncherConfig::load(&root().join(relative)).unwrap_or_else(|why| panic!("{relative}: {why}"))
 }
 
+#[test]
+fn the_local_composition_loads_with_its_loopback_model_provider() {
+    let generated = std::process::Command::new("python3")
+        .arg("-c")
+        .arg(
+            "import json, sys; from pathlib import Path; \
+             root = Path(sys.argv[1]); sys.path.insert(0, str(root / 'deploy/local')); \
+             import composition; \
+             print(json.dumps(composition.make(root, '/opt/mathlib/.lake/build/lib/lean', 37071)))",
+        )
+        .arg(root())
+        .output()
+        .expect("generate the local deployment configuration");
+    assert!(generated.status.success(), "{}", String::from_utf8_lossy(&generated.stderr));
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("local.json");
+    std::fs::write(&path, generated.stdout).unwrap();
+    let config = LauncherConfig::load(&path).expect("local configuration must pass the real loader");
+    assert_eq!(values_of(&program(&config, "model").args, "--base-url"), ["http://127.0.0.1:37071"]);
+}
+
 fn program<'a>(config: &'a LauncherConfig, name: &str) -> &'a ProgramConfig {
     config.programs.get(&ProgramName::new(name).unwrap()).unwrap_or_else(|| panic!("program {name}"))
 }
