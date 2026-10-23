@@ -11,7 +11,7 @@ deletes them. No session/model state or live authority is migrated by this tool.
 A nonblocking operator lock serializes installs and checks, including the shared
 Cargo build cache. The synthetic Git index exists only for repository checks;
 it contains no history, remotes, hooks or host configuration. The original commit
-and transferred archive hash are recorded outside the source tree. This helper
+and transferred archive hash are recorded outside the tracked source tree. This helper
 runs builds as the guest operator, who has sudo; source must be trusted for that
 purpose. Runtime test programs still enter the real Nucleus sandboxes.
 """

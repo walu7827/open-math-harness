@@ -3,6 +3,14 @@
 //! Every path is resolved beneath the working directory with no link
 //! followed, and the last component is acted on through its opened parent,
 //! never by name from the root again.
+//!
+//! A revision includes the SHA-256 of the opened file's contents: equal-size
+//! writes can share both mtime and ctime on a coarse filesystem clock. Each
+//! download hashes the whole file, retaining only its requested chunk; no
+//! metadata-keyed cache can distinguish those writes. This costs a full read
+//! per chunk. A read that observes changed metadata or an early EOF fails.
+//! It is still an observation, not a snapshot or a lock against shell writers
+//! changing the file during the read or after a save's final check.
 
 use std::os::fd::{AsFd, OwnedFd};
 
@@ -12,6 +20,7 @@ use nucleus_projects_interface::{
 };
 use nucleus_protocol::{Error, ErrorCode};
 use rustix::fs::{AtFlags, FileType, Mode, OFlags, RenameFlags};
+use sha2::{Digest, Sha256};
 
 use crate::home::{Home, errno, fresh_name, open_beneath, open_dir};
 
@@ -46,8 +55,7 @@ fn millis(stat: &rustix::fs::Stat) -> u64 {
     seconds.saturating_mul(1000).saturating_add(nanos / 1_000_000)
 }
 
-/// An observation, not a lock against the project's shell writers.
-pub fn revision(stat: &rustix::fs::Stat) -> String {
+fn metadata_revision(stat: &rustix::fs::Stat) -> String {
     format!(
         "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
         stat.st_dev,
@@ -58,6 +66,55 @@ pub fn revision(stat: &rustix::fs::Stat) -> String {
         stat.st_ctime,
         stat.st_ctime_nsec
     )
+}
+
+/// The revision of an already opened regular file. Bound its size again here
+/// because a staged upload's descriptor may have been changed by a shell writer
+/// before publication. No path is reopened and pread leaves the offset alone.
+pub fn revision(fd: impl AsFd, stat: &rustix::fs::Stat) -> Result<String, Error> {
+    if !u64::try_from(stat.st_size).is_ok_and(|size| size <= MAX_FILE_BYTES) {
+        return Err(invalid(format!("file is larger than {MAX_FILE_BYTES} bytes")));
+    }
+    observe(fd, stat, 0, 0).map(|(revision, _)| revision)
+}
+
+/// Hash the bytes of the file and keep the requested range from that same
+/// read. In particular, a download never returns bytes from one read with
+/// the content hash of a later read of the same descriptor.
+fn observe(
+    fd: impl AsFd,
+    stat: &rustix::fs::Stat,
+    offset: u64,
+    want: usize,
+) -> Result<(String, Vec<u8>), Error> {
+    let changed = || Error::new(ErrorCode::ServiceError, "The file changed while it was read.");
+    let size = u64::try_from(stat.st_size).unwrap_or(0);
+    let mut hash = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    let mut data = Vec::with_capacity(want);
+    let mut position = 0;
+    while position < size {
+        let amount = usize::try_from((size - position).min(buffer.len() as u64)).unwrap_or(buffer.len());
+        let read = match rustix::io::pread(&fd, &mut buffer[..amount], position) {
+            Ok(0) => return Err(changed()),
+            Ok(read) => read,
+            Err(rustix::io::Errno::INTR) => continue,
+            Err(e) => return Err(errno("reading file content", e)),
+        };
+        hash.update(&buffer[..read]);
+        let start = position.max(offset);
+        let end = (position + read as u64).min(offset + want as u64);
+        if start < end {
+            data.extend_from_slice(&buffer[(start - position) as usize..(end - position) as usize]);
+        }
+        position += read as u64;
+    }
+    let after = rustix::fs::fstat(&fd).map_err(|e| errno("reading file metadata", e))?;
+    let metadata = metadata_revision(stat);
+    if metadata != metadata_revision(&after) {
+        return Err(changed());
+    }
+    Ok((format!("{metadata}:{:x}", hash.finalize()), data))
 }
 
 fn kind(mode: u32) -> Kind {
@@ -176,27 +233,13 @@ pub fn download(dir: impl AsFd, path: &str, offset: u64) -> Result<Chunk, Error>
         return Err(invalid(format!("offset {offset} is past the end of {path:?} ({size} bytes)")));
     }
     let want = usize::try_from((size - offset).min(CHUNK_BYTES as u64)).unwrap_or(CHUNK_BYTES);
-    let mut data = vec![0u8; want];
-    let mut read = 0;
-    while read < want {
-        match rustix::io::pread(&fd, &mut data[read..], offset + read as u64) {
-            Ok(0) => break,
-            Ok(n) => read += n,
-            Err(rustix::io::Errno::INTR) => {}
-            Err(e) => return Err(errno(&format!("{path:?}"), e)),
-        }
-    }
-    let after = rustix::fs::fstat(&fd).map_err(|e| errno(path, e))?;
-    if revision(&stat) != revision(&after) || read != want {
-        return Err(Error::new(ErrorCode::ServiceError, "The file changed while it was read."));
-    }
-    data.truncate(read);
-    let end = offset + read as u64;
+    let (revision, data) = observe(&fd, &stat, offset, want)?;
+    let end = offset + data.len() as u64;
     Ok(Chunk {
         data_base64: base64::engine::general_purpose::STANDARD.encode(&data),
         size,
         modified: millis(&stat),
-        revision: revision(&stat),
+        revision,
         next_offset: (end < size).then_some(end),
     })
 }

@@ -4,8 +4,8 @@
 //! partial file where the person or an agent can see it.
 //!
 //! A conditional save (`expected_revision` with `upload_id`) compares the
-//! destination's descriptor metadata (`files::revision`: device, inode, size,
-//! nanosecond mtime and ctime) at the first chunk and again before publishing,
+//! destination's descriptor metadata and content hash (`files::revision`)
+//! at the first chunk and again before publishing,
 //! answers `conflict` for a change it observes, and then publishes by rename:
 //! a shell write or a replacement of the path between that check and the
 //! rename can still race it. It is no lock: the project's processes, all of
@@ -115,7 +115,7 @@ impl Uploads {
             let file = open_beneath(
                 &staging,
                 &staged,
-                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW,
+                OFlags::RDWR | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW,
                 Mode::from_raw_mode(0o666),
             )
             .map_err(|e| errno("the upload's staging file", e))?;
@@ -208,7 +208,9 @@ fn publish(
     // A failure after publication has an unknown outcome; it is never safe to replay it.
     let stat =
         rustix::fs::fstat(&upload.file).map_err(|e| Error::new(ErrorCode::UnknownOutcome, e.to_string()))?;
-    Ok(Some(revision(&stat)))
+    revision(&upload.file, &stat)
+        .map(Some)
+        .map_err(|e| Error::new(ErrorCode::UnknownOutcome, e.message))
 }
 
 /// Check the opened file, without following links. Publication still has a small
@@ -227,7 +229,8 @@ fn checked_destination(
         };
     let stat = rustix::fs::fstat(&fd).map_err(|e| errno(name, e))?;
     if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile
-        || request.expected_revision.as_deref() != Some(revision(&stat).as_str())
+        || !u64::try_from(stat.st_size).is_ok_and(|size| size <= MAX_FILE_BYTES)
+        || request.expected_revision.as_deref() != Some(revision(&fd, &stat)?.as_str())
     {
         return Ok(None);
     }

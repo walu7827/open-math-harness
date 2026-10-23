@@ -484,7 +484,8 @@ pub struct Chunk {
     pub data_base64: String,
     pub size: u64,
     pub modified: u64,
-    /// Opaque descriptor metadata, including inode and nanosecond change time.
+    /// Opaque descriptor metadata and content hash. A same-size write can
+    /// share timestamps, so metadata alone is not a content revision.
     pub revision: String,
     pub next_offset: Option<u64>,
 }
