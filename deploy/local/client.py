@@ -13,6 +13,9 @@ diagnostic, not a durable recovery journal. Disconnecting or timing out ends
 only this client's wait, never the session or its actions. Use sessions.stop
 explicitly to stop an agent. History is paged without accumulating the session,
 and terminal text cannot carry control sequences. JSON mode preserves fields.
+Chat first pages the live session list and creates an agent only if none is
+running for that project and session. A concurrent creation or termination may
+still make the next operation fail; that failure is reported without replay.
 """
 
 import json
@@ -79,7 +82,24 @@ class Client:
             raise ValueError("chat needs project, session and text")
         scope = {key: data[key] for key in ("project", "session")}
         deadline = time.monotonic() + 900
-        self.request({"op": "sessions.create", **scope})
+        after = None
+        while True:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("session listing exceeded the client deadline")
+            page = self.request({"op": "sessions.list", "after": after})
+            if not isinstance(page, dict) or not isinstance(page.get("sessions"), list):
+                raise ValueError("invalid session list")
+            if any(isinstance(session, dict) and session.get("project") == scope["project"]
+                   and session.get("name") == scope["session"] and session.get("live") is True
+                   for session in page["sessions"]):
+                break
+            following = page.get("next")
+            if following is None:
+                self.request({"op": "sessions.create", **scope})
+                break
+            if not isinstance(following, str) or not following or (after is not None and following <= after):
+                raise ValueError("session list did not advance")
+            after = following
         after = None
         while True:
             if time.monotonic() >= deadline:
