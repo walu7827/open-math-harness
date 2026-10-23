@@ -6,15 +6,18 @@ release by hash and both source repositories by commit; PutnamBench's unchanged
 lockfile pins Mathlib and its transitive dependencies. No project or private
 research is read. Only dependencies selected by those manifests are built.
 This is trusted build tooling with the operator's authority, not an agent tool.
+After the unprivileged build, publish_lean.py copies the public dependencies as
+root into a separate read-only installation. Both runtime units must be stopped.
 
 The official archive is hashed before extraction into a private staging path.
 Each completed installation is published by rename. Failure removes the new
 staging directory and preserves an existing completed version; it does not
 retry network operations or reuse a partially built tree. An operator lock
 belongs to guest.py, which invokes this script. Normal mathlib cache files can
-remain in the operator's home after failure. These user-owned development
-assets are for tests; a resident verifier must receive root-owned copies/binds
-that project processes cannot modify. No claim of that deployment is made here.
+remain in the operator's home after failure. User-owned development assets are
+for tests; the separate root-owned publication is for the resident verifier's
+binds. Publication failure leaves the completed development environment usable,
+but fails this command. Neither phase starts or configures a resident runtime.
 
 The printed JSON supplies PB_LEAN, PB_FROZEN, NUCLEUS_REPL and PATH for the
 repository's explicit opt-in tests. The conventional ~/.elan/toolchains path
@@ -77,8 +80,8 @@ def main():
     toolchain = Path.home() / ".elan/toolchains" / ("nucleus-lean-" + version)
     archive = pins["archives"][platform.machine()]
     if not toolchain.exists():
-        if shutil.disk_usage(cache).free < 20 * 1024**3:
-            raise ValueError("Lean setup needs at least 20 GiB free in the VM; enlarge its disk first")
+        if shutil.disk_usage(cache).free < 30 * 1024**3:
+            raise ValueError("Lean setup and its read-only copy need at least 30 GiB free in the VM; enlarge its disk first")
         toolchain.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".lean-", dir=toolchain.parent) as temporary:
             staging = Path(temporary)
@@ -132,6 +135,7 @@ def main():
     pointer = cache / "lean-current.next"
     pointer.write_text(json.dumps({"version": 1, "environment": result}) + "\n")
     pointer.replace(cache / "lean-current.json")
+    run("sudo", "python3", str(Path(__file__).with_name("publish_lean.py")), str(target), str(toolchain))
     print(json.dumps(result), flush=True)
 
 

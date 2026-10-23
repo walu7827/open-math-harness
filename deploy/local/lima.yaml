@@ -8,7 +8,9 @@ vmType: vz
 # Plain mode removes that service, not just automatic host port forwarding.
 plain: true
 cpus: 4
-memory: 6GiB
+# A complete Mathlib import exceeds the practical page-cache room in a 6 GiB
+# guest; 8 GiB leaves space for the verifier and its read-only imported files.
+memory: 8GiB
 disk: 64GiB
 mounts: []
 containerd:

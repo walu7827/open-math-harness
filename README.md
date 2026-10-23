@@ -91,9 +91,14 @@ broker's completion-only text protocol, parameter limits and cancellation; it
 does not yet provide Claude, memory consolidation or Lean integration.
 
 `python3 tools/local_runtime.py prepare-lean` installs the pinned public Lean,
-Mathlib and REPL development environment in the guest. It requires at least
-20 GiB of free guest disk space for a new toolchain; new VMs have a 64 GiB disk.
-These are development assets for opt-in tests, not a configured resident verifier.
+Mathlib and REPL development environment and publishes a separate root-owned,
+read-only copy for the verifier. The runtime must be stopped. It requires at least
+30 GiB of free guest disk space for a new toolchain; new VMs have 8 GiB of memory
+and a 64 GiB disk. For an older 6 GiB VM, stop it and run
+`limactl edit open-math-harness --memory 8` before starting it again: importing
+complete Mathlib needs the additional memory to avoid repeated disk reads.
+The opt-in tests use the development assets; publication alone does not configure
+or start a resident verifier.
 After installation, `python3 tools/local_runtime.py check --suite lean` runs the
 existing opt-in verifier, prover, discovery and plan coordination tests with real
 Lean and deterministic model responses. Missing dependencies fail the command.
