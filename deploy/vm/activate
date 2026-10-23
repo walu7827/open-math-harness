@@ -34,7 +34,19 @@
 #     is stopped.
 # From step 7 on nothing is undone: a failure leaves the runtime as it is then
 # (stopped, after a failed check), and the next activation goes on from there.
+#
+# --prepare-only is the local composition's installation entry: steps 1..6,
+# the program/data links and the identity-helper policy from step 7, and the
+# same vsock check. It neither installs hosted configuration/units nor starts
+# services. The caller must then supply its own validated composition and
+# service manager; prepared accounts and binaries alone are not a live runtime.
 set -eu
+prepare_only=
+case "$#:$*" in
+    0:) ;;
+    1:--prepare-only) prepare_only=1 ;;
+    *) echo 'usage: activate [--prepare-only]' >&2; exit 2 ;;
+esac
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 bundle=$(cd "$(dirname "$0")/../.." && pwd -P)
@@ -48,6 +60,20 @@ fail() {
 }
 note() {
     echo "nucleus activate: $*" >&2
+}
+
+# The same check applies to a hosted activation and a local preparation.
+# No network namespace hides vsock. A listener outside systemd can be
+# impersonated by a project after it exits; a local Lima profile therefore
+# removes its guest-agent tunnel entirely before invoking this script.
+check_vsock() {
+    listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null) ||
+        fail "ss cannot check vsock listeners"
+    stray=$(printf '%s\n' "$listeners" | awk 'NR > 1 && $0 !~ /pid=1,/ { print $5 }' | tr '\n' ' ')
+    if [ -n "$stray" ]; then
+        systemctl stop nucleus.service 2>/dev/null || true
+        fail "vsock listeners that are not systemd's: $stray; the runtime is stopped"
+    fi
 }
 
 # 1. The root filesystem fills its disk. The platform grows a VM's disk when
@@ -402,6 +428,12 @@ put() {
     mv -f "$2.new" "$2"
     changed=1
 }
+put "$deploy/nucleus-as.conf" /etc/nucleus/nucleus-as.conf
+if [ -n "$prepare_only" ]; then
+    check_vsock
+    note "accounts, workspace, programs and helper policy prepared; no services started"
+    exit 0
+fi
 # nucleus.json names every path a project's process sees by its real spelling,
 # since such a process runs in no sandbox: its project's repository at
 # /workspace/nucleus/work/projects/<project>/repo, the shared home
@@ -413,7 +445,6 @@ put() {
 # programs' guest paths (/sessions, /model, /state, ...) stay inside their
 # sandboxes.
 put "$deploy/nucleus.json" /etc/nucleus/nucleus.json
-put "$deploy/nucleus-as.conf" /etc/nucleus/nucleus-as.conf
 [ -e /etc/nucleus/policy/approvals.json ] ||
     install -m 0644 "$deploy/approvals.json" /etc/nucleus/policy/approvals.json
 put "$deploy/nucleus.service" /etc/systemd/system/nucleus.service
@@ -458,12 +489,4 @@ done
 # so whoever listens on one receives what the host sends there. Every vsock
 # listener of the VM is systemd's (pid 1), where `ss` can list them.
 # Otherwise the runtime is stopped.
-if listeners=$(ss --vsock --listening --numeric --processes 2>/dev/null); then
-    stray=$(printf '%s\n' "$listeners" | awk 'NR > 1 && $0 !~ /pid=1,/ { print $5 }' | tr '\n' ' ')
-    if [ -n "$stray" ]; then
-        systemctl stop nucleus.service 2>/dev/null || true
-        fail "vsock listeners that are not systemd's: $stray; the runtime is stopped"
-    fi
-else
-    note "ss cannot list vsock sockets; whether something listens on vsock is not checked"
-fi
+check_vsock

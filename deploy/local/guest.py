@@ -126,8 +126,9 @@ def main():
         os.chdir(source)
         os.environ["PATH"] = str(Path.home() / ".cargo/bin") + ":/usr/local/bin:/usr/bin:/bin"
         os.environ["CARGO_TARGET_DIR"] = str(ROOT / "target")
-        if action == "prepare-lean":
-            run("python3", str(source / "deploy/local/lean.py"))
+        if action in ("prepare-lean", "prepare-platform"):
+            script = "lean.py" if action == "prepare-lean" else "prepare_platform.py"
+            run("python3", str(source / "deploy/local" / script))
             return
         run("rustup", "show")  # rust-toolchain.toml is the single version source.
         if action == "build":

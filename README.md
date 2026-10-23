@@ -94,6 +94,10 @@ does not yet provide Claude, memory consolidation or Lean integration.
 Mathlib and REPL development environment in the guest. It requires at least
 20 GiB of free guest disk space for a new toolchain; new VMs have a 64 GiB disk.
 These are development assets for opt-in tests, not a configured resident verifier.
+`python3 tools/local_runtime.py prepare-platform` builds and installs the runtime
+programs, prepares the real runtime/projects Unix identities, and runs the six
+opt-in identity and cgroup tests under systemd delegation. It retains existing
+workspace data and does not start a resident composition.
 
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,

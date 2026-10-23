@@ -118,7 +118,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--instance", default=DEFAULT_INSTANCE)
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("start", "stop", "status", "build", "slice", "harden", "prepare-lean"):
+    for name in ("start", "stop", "status", "build", "slice", "harden", "prepare-lean", "prepare-platform"):
         commands.add_parser(name)
     sync = commands.add_parser("sync", help="send only a committed source tree")
     sync.add_argument("--ref", default="HEAD")
