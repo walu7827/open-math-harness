@@ -173,9 +173,12 @@ def main():
             os.environ["PATH"] = environment.pop("PATH_PREFIX") + ":" + os.environ["PATH"]
             os.environ.update(environment)
             run("cargo", "build", "--locked", "--workspace")
-            run("cargo", "test", "--locked", "-p", "nucleus-lean", "--lib", "--", "--ignored", "--test-threads=1")
-            run("cargo", "test", "--locked", "-p", "nucleus-e2e", "--test", "lean", "--test", "prover",
-                "--test", "discovery", "--test", "plan_coordination", "--", "--ignored", "--test-threads=1")
+            run("cargo", "test", "--locked", "-p", "nucleus-lean", "--lib", "--", "--ignored", "--test-threads=1",
+                "--nocapture")
+            # Report a long-running test's failure when it happens, and let
+            # the other independent targets finish before Cargo fails the command.
+            run("cargo", "test", "--locked", "--no-fail-fast", "-p", "nucleus-e2e", "--test", "lean", "--test", "prover",
+                "--test", "discovery", "--test", "plan_coordination", "--", "--ignored", "--test-threads=1", "--nocapture")
             return
         if action == "build":
             run("cargo", "build", "--locked", "--workspace")
