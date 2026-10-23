@@ -5,8 +5,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -21,6 +23,34 @@ SPEC.loader.exec_module(GUEST)
 
 
 class LocalRuntime(unittest.TestCase):
+    def test_request_keeps_piped_json_for_the_guest_client(self):
+        # An SSH preflight can drain inherited stdin even when its remote
+        # command reads none. Exercise the operator entry point with real
+        # subprocess pipes; only Lima's VM interaction is substituted.
+        with tempfile.TemporaryDirectory() as directory:
+            lima = Path(directory) / "limactl"
+            lima.write_text(f"#!{sys.executable}\n" + '''import json, sys
+args = sys.argv[1:]
+if "list" in args:
+    print(json.dumps({"name": "open-math-harness", "status": "Running", "config": {
+        "plain": True, "propagateProxyEnv": False, "mounts": [], "portForwards": []}}))
+elif args[-1] == "request":
+    print(json.dumps(json.load(sys.stdin)))
+elif "shell" in args:
+    sys.stdin.buffer.read()
+else:
+    raise SystemExit("unexpected Lima command")
+''')
+            lima.chmod(0o700)
+            request = {"op": "projects.list"}
+            result = subprocess.run(
+                [sys.executable, str(local_runtime.ROOT / "tools/local_runtime.py"), "request"],
+                input=json.dumps(request), text=True, capture_output=True,
+                env={**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"]},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), request)
+
     def test_archive_and_publication_send_only_the_selected_commit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -74,16 +104,14 @@ class LocalRuntime(unittest.TestCase):
 
     def test_existing_vm_with_host_access_is_refused(self):
         safe = {"mounts": [], "ssh": {"forwardAgent": False, "loadDotSSHPubKeys": False},
-                "propagateProxyEnv": False,
-                "portForwards": [{"ignore": True, "guestPortRange": [1, 65535],
-                                  "guestIP": "0.0.0.0", "proto": "any"}]}
+                "propagateProxyEnv": False, "plain": True, "portForwards": []}
         local_runtime.check_boundary({"config": safe})
         for key, value in (("mounts", [{"location": "~"}]), ("ssh", {"forwardAgent": True}),
                            ("ssh", {"loadDotSSHPubKeys": True}), ("propagateProxyEnv", True),
                            ("env", {"HOST_TOKEN": "fixture"}),
                            ("copyToHost", [{"guest": "/tmp/file", "host": "~/file"}]),
-                           ("portForwards", [{**safe["portForwards"][0], "guestIPMustBeZero": True}]),
-                           ("portForwards", [])):
+                           ("portForwards", [{"static": True, "guestPort": 8080}]),
+                           ("plain", False)):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 local_runtime.check_boundary({"config": {**copy.deepcopy(safe), key: value}})
 

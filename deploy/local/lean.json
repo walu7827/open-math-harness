@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "lean": "4.33.0",
+  "archives": {
+    "aarch64": {"name": "lean-4.33.0-linux_aarch64.tar.zst", "sha256": "f961a417cba10b6ea0a9d136712d5952813817ffd6680041f09a233526f803a9"},
+    "x86_64": {"name": "lean-4.33.0-linux.tar.zst", "sha256": "4b3fb03c29a1e0a253fb1d11f9bae3725f19a0dc6fc09b3ea16d2c9df3349e2c"}
+  },
+  "putnambench": {"url": "https://github.com/trishullab/PutnamBench.git", "commit": "13d042960189f55d748048317c24064a0e2215ea"},
+  "repl": {"url": "https://github.com/leanprover-community/repl.git", "commit": "bbeedf38e0898869fc3b7c009e1ea877b46204e4"}
+}

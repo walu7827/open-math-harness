@@ -41,7 +41,7 @@ different trust boundary from Nucleus capabilities and Linux namespaces. The
 module documentation in `tools/codex_harness.py` describes the exact limitations.
 Run directories contain private research and logs; keep them outside publication.
 
-Portable regression tests (no model call):
+Portable regression tests (Python 3.12+, no model call):
 
 ```sh
 python3 -m unittest discover -s tools -p 'test_*.py'
@@ -68,12 +68,83 @@ python3 tools/local_runtime.py check --suite all
 python3 tools/local_runtime.py stop
 ```
 
-The VM has no host directory mounts or forwarded SSH agent. Runtime processes
+The VM uses Lima plain mode, with no guest-agent vsock tunnel, host directory
+mounts or forwarded SSH agent. An older development VM can be migrated with
+`python3 tools/local_runtime.py harden`; its disk and data are retained. Runtime processes
 retain Linux bubblewrap confinement. Stopping keeps its disk and source snapshots.
 The operator workflow and failure behavior are documented in
-`tools/local_runtime.py` and `deploy/local/guest.py`. This is a development
-bootstrap; a standalone resident composition with Codex/Claude, interactive
-clients, memory and configured Lean proof search is still being implemented.
+`tools/local_runtime.py` and `deploy/local/guest.py`. The local resident
+composition below is under integration testing; it is not yet a verified
+replacement for the hosted composition.
+
+An explicit Codex integration check is also available after `sync` and `build`:
+
+```sh
+python3 tools/local_runtime.py model-smoke --codex /path/to/codex
+```
+
+This consumes the logged-in host account's usage. It starts a temporary confined
+Linux chat composition, checks an allowed read and a kernel denial, restarts the
+runtime and verifies that saved history continues without replaying the read.
+Host CLI credentials stay on the Mac. `tools/local_model.py` documents the local
+broker's completion-only text protocol, parameter limits and cancellation.
+This small smoke test does not exercise project identities, memory or Lean.
+
+`python3 tools/local_runtime.py prepare-lean` installs the pinned public Lean,
+Mathlib and REPL development environment and publishes a separate root-owned,
+read-only copy for the verifier. The runtime must be stopped. It requires at least
+30 GiB of free guest disk space for a new toolchain; new VMs have 12 GiB of memory
+and a 64 GiB disk. For an older smaller VM, stop it and run
+`limactl edit open-math-harness --memory 12` before starting it again: the resident
+REPL and independent verifier need room to coexist. The Mac must also have
+memory available for macOS and other applications. Guest free memory and zero
+guest swap do not rule out host swapping, which can stall Mathlib imports past
+their deadlines. Check the Mac's memory pressure before increasing the VM's RAM.
+If builds leave the host under pressure, stop the dedicated VM before freeing
+host memory, then start it fresh; this ends every guest process and keeps its disk.
+The opt-in tests use the development assets; publication alone does not configure
+or start a resident verifier.
+After installation, `python3 tools/local_runtime.py check --suite lean` runs the
+existing opt-in verifier, prover, discovery and plan coordination tests with real
+Lean and deterministic model responses. Missing dependencies fail the command.
+`python3 tools/local_runtime.py prepare-platform` builds and installs the runtime
+programs, prepares the real runtime/projects Unix identities, and runs the six
+opt-in identity and cgroup tests under systemd delegation. It retains existing
+workspace data and does not start a resident composition. After both preparation
+commands, the persistent composition can be run in one terminal:
+
+```sh
+python3 tools/local_runtime.py serve --codex /path/to/codex
+```
+
+Wait for the `ready` event, then use another terminal:
+
+```sh
+python3 tools/local_runtime.py chat --project default --session default
+```
+
+`--message 'text'` sends one message. `request` reads one JSON UI operation from
+stdin; the operation names and payloads are documented in
+`program-files/ui/src/lib.rs`. Both clients use the owner-only guest Unix socket;
+requests still go through the UI service's kernel handles. Leaving the chat
+client does not stop its session. Ctrl-C in `serve` stops the composition and its
+bridge; its persistent conversations, project files and memory remain in the VM.
+The transient systemd unit also depends on that dedicated SSH login's lifetime.
+Startup and cleanup failures are reported. The bridge does not reconnect or
+replay requests; recorded memory jobs retain the memory service's restart
+behavior. Inspect the guest's `journalctl -u nucleus-local` on failure.
+
+The composition includes the ordinary project, conversation, memory and Lean
+discovery services. Their live local workflows are still being verified.
+The host CLI proposes tool calls as structured text; Nucleus authorizes and
+executes them in Linux. Only `codex/default` is exposed; `serve --model` selects
+the actual host Codex model. Claude is not implemented yet. Images, explicit
+output-token caps, temperature and opaque reasoning state are unsupported.
+Reported token usage is retained, but dollar cost is unknown: discovery has no
+USD ceiling and uses its existing per-task model-call budgets. Hosted platform
+and GitHub links, suggestions and Ultramath are omitted; the latter two require
+output-token caps that this CLI bridge cannot enforce. Project archiving and
+unarchiving are unavailable because the UI's archive workflow requires swarm.
 
 **Open Math Harness** is the open-source runtime of
 [Open Math OS](https://www.openmathmodel.org/), and this repository holds its kernel,
