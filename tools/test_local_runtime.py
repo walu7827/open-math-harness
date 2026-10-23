@@ -82,6 +82,7 @@ class LocalRuntime(unittest.TestCase):
                            ("ssh", {"loadDotSSHPubKeys": True}), ("propagateProxyEnv", True),
                            ("env", {"HOST_TOKEN": "fixture"}),
                            ("copyToHost", [{"guest": "/tmp/file", "host": "~/file"}]),
+                           ("portForwards", [{**safe["portForwards"][0], "guestIPMustBeZero": True}]),
                            ("portForwards", [])):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 local_runtime.check_boundary({"config": {**copy.deepcopy(safe), key: value}})
