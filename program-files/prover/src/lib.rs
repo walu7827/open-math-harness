@@ -52,6 +52,9 @@
 //!
 //! Output (durable, in `--out`): `attempts.jsonl`, one line per candidate with
 //! the verdict, and `result.json` at the end, under `out/<problem>/<task>/`.
+//! The result identifies its operation with `mode: "continue"` in both loops.
+//! This record is the worker's report, not verification authority; the run
+//! still scores the submitted candidate through its independent Lean handle.
 //!
 //! Model output and Lean diagnostics are untrusted text; the template is
 //! trusted input from the task's author, the values rendered into it are not.
@@ -796,6 +799,7 @@ impl ContinueAttempt {
 
 /// The final record of a continuation (`result.json`).
 #[derive(Clone, Debug, Serialize)]
+#[serde(tag = "mode", rename = "continue")]
 pub struct ContinueOutcome {
     pub problem: String,
     pub task: String,
