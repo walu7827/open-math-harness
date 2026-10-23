@@ -41,7 +41,7 @@ different trust boundary from Nucleus capabilities and Linux namespaces. The
 module documentation in `tools/codex_harness.py` describes the exact limitations.
 Run directories contain private research and logs; keep them outside publication.
 
-Portable regression tests (no model call):
+Portable regression tests (Python 3.12+, no model call):
 
 ```sh
 python3 -m unittest discover -s tools -p 'test_*.py'
